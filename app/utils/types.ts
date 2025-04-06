@@ -39,23 +39,24 @@ export interface Item {
 }
 
 export interface User {
-  id: string;
+  id?: string;
   email: string;
-  password: string; // サーバーではハッシュ化して保存
+  password: string;
   createdAt: Date;
   points: number;
   tasks: Task[];
+  catAvatar?: CatAvatar | null;
+  verified?: boolean;
+  verificationCode?: string;
+  verificationExpires?: Date;
+  tempUser?: boolean; // 仮登録フラグ
 }
 
 export interface AuthResponse {
   success: boolean;
+  user?: User;
   message?: string;
-  user?: {
-    id: string;
-    email: string;
-    points: number;
-  };
-  token?: string;
+  needsVerification?: boolean;
 }
 
 export interface ApiError {

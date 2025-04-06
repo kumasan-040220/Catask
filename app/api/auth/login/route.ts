@@ -49,6 +49,21 @@ export async function POST(req: NextRequest) {
 
     console.log("ユーザーが見つかりました:", user.id);
 
+    // メール認証が完了しているか確認
+    if (user.verified === false) {
+      console.log("未認証のアカウント:", email);
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "アカウントが未認証です。メールに送信された認証コードを使用して認証を完了してください。",
+          needsVerification: true,
+          email: user.email,
+        },
+        { status: 403 }
+      );
+    }
+
     // パスワードを検証
     let isPasswordValid;
     try {

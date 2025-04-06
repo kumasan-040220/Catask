@@ -25,6 +25,55 @@ export async function registerUser(
   }
 }
 
+// メール認証コードの検証
+export async function verifyEmail(
+  email: string,
+  code: string
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    const response = await fetch("/api/auth/verify", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, code }),
+    });
+
+    return await response.json();
+  } catch (error) {
+    console.error("メール認証処理中にエラーが発生しました", error);
+    return {
+      success: false,
+      message:
+        "通信エラーが発生しました。インターネット接続を確認してください。",
+    };
+  }
+}
+
+// 認証コードの再送信
+export async function resendVerification(
+  email: string
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    const response = await fetch("/api/auth/resend-verification", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email }),
+    });
+
+    return await response.json();
+  } catch (error) {
+    console.error("認証コード再送信中にエラーが発生しました", error);
+    return {
+      success: false,
+      message:
+        "通信エラーが発生しました。インターネット接続を確認してください。",
+    };
+  }
+}
+
 // ユーザーログイン
 export async function loginUser(
   email: string,

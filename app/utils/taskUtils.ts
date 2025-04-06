@@ -31,11 +31,11 @@ export const saveTasks = (tasks: Task[]): void => {
 };
 
 // 新しいタスクを作成
-export const createTask = (
+export function createTask(
   title: string,
   estimatedTime: number = 0,
   dueDate: Date | null = null
-): Task => {
+): Task {
   return {
     id: uuidv4(),
     title,
@@ -44,27 +44,89 @@ export const createTask = (
     estimatedTime,
     dueDate,
   };
-};
+}
 
-// タスクをフィルタリング
-export const filterTasks = (tasks: Task[], filter: TaskFilter): Task[] => {
-  switch (filter) {
-    case TaskFilter.ACTIVE:
-      return tasks.filter((task) => !task.completed);
-    case TaskFilter.COMPLETED:
-      return tasks.filter((task) => task.completed);
-    case TaskFilter.ALL:
-    default:
-      return tasks;
+// 安全にタスクフィルタリングを行う関数 - プリミティブかつシンプルな実装
+export const filterTasks = (
+  tasks: Task[],
+  filter: TaskFilter,
+  debug = false
+): Task[] => {
+  if (!tasks || !Array.isArray(tasks)) {
+    console.warn("filterTasks: タスクが無効です", tasks);
+    return [];
   }
+
+  const validTasks = tasks.filter((task) => task && typeof task === "object");
+
+  if (validTasks.length !== tasks.length) {
+    console.warn(
+      `filterTasks: ${
+        tasks.length - validTasks.length
+      }件の無効なタスクを除外しました`
+    );
+  }
+
+  let result: Task[] = [];
+
+  if (filter === TaskFilter.COMPLETED) {
+    // 完了タスクの一覧表示用 - 厳密に完了状態を確認
+    result = validTasks.filter((task) => {
+      const isCompleted = task.completed === true;
+      if (debug && isCompleted) {
+        console.log(
+          `完了タスク: ${task.id}, ${task.title}, 完了=${task.completed}`
+        );
+      }
+      return isCompleted;
+    });
+
+    console.log(
+      `filterTasks: ${result.length}件の完了タスクをフィルタリングしました`
+    );
+  } else if (filter === TaskFilter.ACTIVE) {
+    // 未完了タスクの一覧表示用
+    result = validTasks.filter((task) => task.completed !== true);
+    console.log(
+      `filterTasks: ${result.length}件の未完了タスクをフィルタリングしました`
+    );
+  } else {
+    // すべてのタスク表示用
+    result = [...validTasks];
+    console.log(
+      `filterTasks: フィルターなし - ${result.length}件のタスクを全て表示`
+    );
+  }
+
+  return result;
 };
 
-// タスクをソート（新しい順）
-export const sortTasks = (tasks: Task[]): Task[] => {
-  return [...tasks].sort(
-    (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
-  );
-};
+// 安全にタスク並べ替えを行う関数
+export function sortTasks(tasks: Task[]): Task[] {
+  if (!tasks || !Array.isArray(tasks) || tasks.length === 0) {
+    return [];
+  }
+
+  try {
+    // createdAtプロパティの存在を確認し、日付順に並べ替え
+    return [...tasks].sort((a, b) => {
+      // createdAtがない場合は最後に表示
+      if (!a.createdAt) return 1;
+      if (!b.createdAt) return -1;
+
+      // Date型に変換して比較
+      const dateA =
+        a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
+      const dateB =
+        b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
+
+      return dateB.getTime() - dateA.getTime();
+    });
+  } catch (error) {
+    console.error("sortTasks: タスクの並べ替え中にエラーが発生しました", error);
+    return tasks; // エラー時は元のタスクリストをそのまま返す
+  }
+}
 
 // 日付をフォーマットする関数 (YYYY-MM-DD)
 export const formatDate = (date: Date): string => {
@@ -121,3 +183,59 @@ export const formatDueDateTime = (dueDate: Date): string => {
 
   return `${year}/${month}/${day} ${hours}:${minutes}`;
 };
+
+// 完了タスクのみを取得する関数（アーカイブタブ用）
+export function getCompletedTasks(tasks: Task[]): Task[] {
+  if (!tasks || !Array.isArray(tasks) || tasks.length === 0) {
+    return [];
+  }
+
+  try {
+    // completed === true のタスクのみを厳密に抽出
+    const completedTasks = tasks.filter((task) => {
+      // オブジェクトの存在確認
+      if (!task) return false;
+
+      // completedプロパティが明示的にtrueのものだけを抽出
+      return task.completed === true;
+    });
+
+    // 結果をログ出力
+    console.log(
+      `getCompletedTasks: ${completedTasks.length}件の完了タスクを抽出しました`
+    );
+    if (completedTasks.length > 0) {
+      completedTasks.forEach((task, index) => {
+        console.log(
+          `完了タスク[${index}]: ID=${task.id}, タイトル=${task.title}, 完了=${task.completed}`
+        );
+      });
+    }
+
+    return completedTasks;
+  } catch (error) {
+    console.error("getCompletedTasks: エラーが発生しました", error);
+    return [];
+  }
+}
+
+// アクティブタスクのみを取得する関数（アクティブタブ用）
+export function getActiveTasks(tasks: Task[]): Task[] {
+  if (!tasks || !Array.isArray(tasks) || tasks.length === 0) {
+    return [];
+  }
+
+  try {
+    // completed !== true のタスクのみを厳密に抽出
+    return tasks.filter((task) => {
+      // オブジェクトの存在確認
+      if (!task) return false;
+
+      // completedプロパティがtrueでないものだけを抽出
+      return task.completed !== true;
+    });
+  } catch (error) {
+    console.error("getActiveTasks: エラーが発生しました", error);
+    return [];
+  }
+}

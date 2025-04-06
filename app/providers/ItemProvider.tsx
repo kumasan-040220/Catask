@@ -66,18 +66,20 @@ export function ItemProvider({ children }: ItemProviderProps) {
   const purchaseItem = (itemId: string): boolean => {
     const item = getItemById(itemId);
     if (!item) {
-      console.error("アイテムが見つかりません:", itemId);
+      console.error("アイテムの購入処理に失敗しました");
       return false;
     }
 
     // ポイントがあるか確認
     if (!user || user.points < item.price) {
-      console.error("ポイントが足りません");
+      console.error("ポイント不足のため購入できません");
       return false;
     }
 
-    // ポイントを消費
-    updatePoints(-item.price);
+    // ポイントを消費 - 現在のポイントから価格を引いた値を渡す
+    const newPoints = user.points - item.price;
+    console.log("アイテム購入処理を実行しました");
+    updatePoints(newPoints);
 
     // 所有アイテムを更新
     const existingItemIndex = ownedItems.findIndex((oi) => oi.id === itemId);
@@ -104,13 +106,13 @@ export function ItemProvider({ children }: ItemProviderProps) {
   const useItem = (itemId: string): boolean => {
     const ownedItem = ownedItems.find((item) => item.id === itemId);
     if (!ownedItem || ownedItem.quantity <= 0) {
-      console.error("アイテムを所持していません:", itemId);
+      console.error("アイテム使用処理に失敗しました");
       return false;
     }
 
     const item = getItemById(itemId);
     if (!item) {
-      console.error("アイテムが見つかりません:", itemId);
+      console.error("アイテム情報の取得に失敗しました");
       return false;
     }
 

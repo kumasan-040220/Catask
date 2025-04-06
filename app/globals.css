@@ -8,6 +8,26 @@
   --background-end-rgb: 255, 255, 255;
 }
 
+/* スクロールバーを非表示にする */
+html {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE, Edge */
+}
+
+html::-webkit-scrollbar {
+  display: none; /* Chrome, Safari */
+}
+
+/* カスタムスクロール要素にも適用 */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 body {
   color: rgb(var(--foreground-rgb));
   background: white;

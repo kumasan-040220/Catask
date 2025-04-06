@@ -50,10 +50,10 @@ export default function Dashboard() {
     try {
       const result = await deleteAccount();
 
-      if (result.success) {
+      if (result) {
         router.push("/auth");
       } else {
-        setDeleteError(result.message || "アカウントの削除に失敗しました");
+        setDeleteError("アカウントの削除に失敗しました");
       }
     } catch (error) {
       setDeleteError("エラーが発生しました。再度お試しください。");

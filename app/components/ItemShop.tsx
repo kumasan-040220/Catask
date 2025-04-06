@@ -13,42 +13,76 @@ export default function ItemShop() {
     ItemCategory | "all"
   >("all");
   const [purchaseMessage, setPurchaseMessage] = useState<string>("");
-  const [useMessage, setUseMessage] = useState<string>("");
+  const [confirmItem, setConfirmItem] = useState<{
+    id: string;
+    price: number;
+    name: string;
+  } | null>(null);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
 
   // メッセージをクリア
   const clearMessages = () => {
     setTimeout(() => {
       setPurchaseMessage("");
-      setUseMessage("");
     }, 3000);
   };
 
+  // 購入確認ダイアログを表示
+  const showPurchaseConfirm = (itemId: string, price: number, name: string) => {
+    if (isProcessing) return;
+    setConfirmItem({ id: itemId, price, name });
+  };
+
+  // 購入確認をキャンセル
+  const cancelPurchase = () => {
+    setConfirmItem(null);
+  };
+
   // アイテムを購入する
-  const handlePurchase = (itemId: string, price: number, name: string) => {
+  const handlePurchase = () => {
+    if (!confirmItem || isProcessing) return;
+
+    const { id, price, name } = confirmItem;
+
     if (!user || user.points < price) {
       setPurchaseMessage(`ポイントが足りません（必要: ${price}ポイント）`);
+      setConfirmItem(null);
       clearMessages();
       return;
     }
 
-    const success = purchaseItem(itemId);
-    if (success) {
-      setPurchaseMessage(`${name}を購入しました！`);
-    } else {
-      setPurchaseMessage("購入に失敗しました");
+    setIsProcessing(true);
+
+    try {
+      const success = purchaseItem(id);
+      if (!success) {
+        setPurchaseMessage("購入に失敗しました");
+      }
+    } catch (error) {
+      setPurchaseMessage("購入処理中にエラーが発生しました");
+    } finally {
+      setIsProcessing(false);
+      setConfirmItem(null);
+      clearMessages();
     }
-    clearMessages();
   };
 
   // アイテムを使用する
   const handleUse = (itemId: string, name: string) => {
-    const success = useItem(itemId);
-    if (success) {
-      setUseMessage(`${name}を使用しました！`);
-    } else {
-      setUseMessage("使用に失敗しました");
+    if (isProcessing) return;
+
+    setIsProcessing(true);
+    try {
+      const success = useItem(itemId);
+      if (!success) {
+        setPurchaseMessage("使用に失敗しました");
+      }
+    } catch (error) {
+      setPurchaseMessage("使用処理中にエラーが発生しました");
+    } finally {
+      setIsProcessing(false);
+      clearMessages();
     }
-    clearMessages();
   };
 
   // 表示するアイテムをフィルタリング
@@ -122,9 +156,57 @@ export default function ItemShop() {
         </div>
       )}
 
-      {useMessage && (
-        <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-2 rounded mb-4">
-          {useMessage}
+      {/* 購入確認ダイアログ */}
+      {confirmItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-4">購入の確認</h3>
+            <p className="mb-4">
+              {confirmItem.name}を{confirmItem.price}ポイントで購入しますか？
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                className="px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400 transition-colors"
+                onClick={cancelPurchase}
+                disabled={isProcessing}
+              >
+                キャンセル
+              </button>
+              <button
+                className="px-4 py-2 bg-primary text-white rounded hover:bg-primary-dark transition-colors flex items-center"
+                onClick={handlePurchase}
+                disabled={isProcessing}
+              >
+                {isProcessing ? (
+                  <>
+                    <svg
+                      className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
+                    </svg>
+                    処理中...
+                  </>
+                ) : (
+                  "購入する"
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -144,7 +226,10 @@ export default function ItemShop() {
               <div className="mt-4 flex space-x-2">
                 <button
                   className="bg-primary text-white px-3 py-1 rounded hover:bg-primary-dark transition-colors"
-                  onClick={() => handlePurchase(item.id, item.price, item.name)}
+                  onClick={() =>
+                    showPurchaseConfirm(item.id, item.price, item.name)
+                  }
+                  disabled={isProcessing}
                 >
                   購入
                 </button>
@@ -153,6 +238,7 @@ export default function ItemShop() {
                   <button
                     className="bg-secondary text-white px-3 py-1 rounded hover:bg-secondary-dark transition-colors"
                     onClick={() => handleUse(item.id, item.name)}
+                    disabled={isProcessing}
                   >
                     使用
                   </button>

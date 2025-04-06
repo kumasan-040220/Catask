@@ -1,20 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import {
-  FaTrash,
-  FaCheck,
-  FaClock,
-  FaCalendarAlt,
-  FaInfoCircle,
-} from "react-icons/fa";
+import { FaCheck, FaClock, FaCalendarAlt, FaInfoCircle } from "react-icons/fa";
 import { Task as TaskType } from "../utils/types";
 import { formatRemainingTime, formatDueDateTime } from "../utils/taskUtils";
 
 interface TaskProps {
   task: TaskType;
   onToggle: (id: string) => void;
-  onDelete: (id: string) => void;
+  onDelete?: (id: string) => void;
 }
 
 export default function Task({ task, onToggle, onDelete }: TaskProps) {
@@ -32,19 +26,6 @@ export default function Task({ task, onToggle, onDelete }: TaskProps) {
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center flex-1">
-          <button
-            onClick={() => onToggle(task.id)}
-            className={`flex items-center justify-center w-6 h-6 rounded-full border mr-3 ${
-              task.completed
-                ? "bg-green-500 border-green-500"
-                : "border-gray-400"
-            }`}
-            aria-label={
-              task.completed ? "タスク完了を取り消す" : "タスクを完了する"
-            }
-          >
-            {task.completed && <FaCheck className="text-white text-xs" />}
-          </button>
           <div className="flex-1 flex flex-col">
             <span
               className={`${
@@ -80,13 +61,15 @@ export default function Task({ task, onToggle, onDelete }: TaskProps) {
             </div>
           </div>
         </div>
-        <button
-          onClick={() => onDelete(task.id)}
-          className="p-2 text-gray-500 hover:text-red-500 transition-colors"
-          aria-label="タスクを削除"
-        >
-          <FaTrash />
-        </button>
+        {!task.completed && (
+          <button
+            onClick={() => onToggle(task.id)}
+            className="py-1 px-3 text-sm text-blue-500 bg-white border border-blue-500 rounded hover:bg-blue-50 transition-colors"
+            aria-label="タスクを完了する"
+          >
+            終了
+          </button>
+        )}
       </div>
 
       {/* 締め切り日時の詳細表示 */}
