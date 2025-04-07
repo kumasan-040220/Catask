@@ -1,0 +1,19 @@
+[
+  {
+    "id": "12945d90-a7f6-4f3d-94c7-dd042375d5d1",
+    "email": "tamataku2122@gmail.com",
+    "password": "$2b$10$Of6vlwHafZIysWyMevApnOYTAgox9cSfzK2YtgA0D5Uk3mp0Sn6jq",
+    "createdAt": "2025-04-06T07:19:43.765Z",
+    "points": 0,
+    "tasks": [
+      {
+        "id": "c9bd788b-5f86-4e11-bac3-78c3e097f059",
+        "title": "歯磨き",
+        "completed": false,
+        "createdAt": "2025-04-06T07:24:44.337Z",
+        "estimatedTime": 0,
+        "dueDate": null
+      }
+    ]
+  }
+]
