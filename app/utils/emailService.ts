@@ -38,23 +38,40 @@ async function initEtherealTransporter() {
   }
 }
 
+// Gmail用の設定を確認する
+const isGmailConfig = process.env.EMAIL_SERVER?.includes("gmail");
+
 // 環境変数で設定されたメールサーバーを使用するか、
 // テスト用のメールサーバーを使用するかの判断
 if (
-  process.env.EMAIL_HOST &&
+  (process.env.EMAIL_SERVER || process.env.EMAIL_HOST) &&
   process.env.EMAIL_USER &&
   process.env.EMAIL_PASS
 ) {
   // 本番用のメール設定
   try {
+    // サーバー設定
+    const host = process.env.EMAIL_SERVER || process.env.EMAIL_HOST;
+    const port = parseInt(process.env.EMAIL_PORT || "587");
+    const secure = process.env.EMAIL_SECURE === "true" || port === 465;
+
+    console.log(`メールサーバー設定: ${host}:${port} (secure: ${secure})`);
+
     transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST,
-      port: parseInt(process.env.EMAIL_PORT || "587"),
-      secure: process.env.EMAIL_SECURE === "true",
+      host: host,
+      port: port,
+      secure: secure,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
+      // Gmail特有の設定
+      ...(isGmailConfig && {
+        service: "gmail",
+        tls: {
+          rejectUnauthorized: false,
+        },
+      }),
     });
 
     // 接続確認（非同期だが起動時のみなので例外的に待たずに続行）
@@ -66,6 +83,7 @@ if (
       })
       .catch((err) => {
         console.error("本番メールサーバーへの接続に失敗しました:", err);
+        console.log("詳細:", JSON.stringify(err));
         emailEnabled = false;
       });
   } catch (error) {
@@ -115,11 +133,17 @@ export async function sendVerificationEmail(
     return true;
   }
 
+  // 送信元メールアドレス設定
+  const fromEmail =
+    process.env.EMAIL_FROM ||
+    `"Catask 公式" <${process.env.EMAIL_USER || "noreply@catask.example.com"}>`;
+
+  console.log(`メール送信試行: 送信先=${email}, 送信元=${fromEmail}`);
+
   try {
     // メール送信
     const info = await transporter.sendMail({
-      from:
-        process.env.EMAIL_FROM || '"Catask 公式" <noreply@catask.example.com>',
+      from: fromEmail,
       to: email,
       subject: "【重要】Catask - アカウント認証コードのお知らせ",
       text: `Cataskをご利用いただきありがとうございます。
@@ -182,6 +206,7 @@ Catask サポートチーム
     return true;
   } catch (error) {
     console.error("メール送信に失敗しました:", error);
+    console.error("詳細エラー:", JSON.stringify(error));
     return false;
   }
 }

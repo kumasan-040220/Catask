@@ -89,7 +89,17 @@ export async function POST(req: NextRequest) {
     const requireVerification = isEmailEnabled();
     console.log(`メール認証機能: ${requireVerification ? "有効" : "無効"}`);
 
-    // メール認証が有効な場合は認証コードを生成してメールを送信
+    // 新しいユーザーオブジェクトを作成（共通部分）
+    const newUser = {
+      email,
+      password: hashedPassword,
+      createdAt: new Date(),
+      points: 0,
+      tasks: [],
+      verified: !requireVerification, // メール認証が必要ない場合は最初から認証済み
+    };
+
+    // メール認証が有効な場合は認証情報を追加
     if (requireVerification) {
       const verificationCode = generateVerificationCode();
 
@@ -100,18 +110,13 @@ export async function POST(req: NextRequest) {
       const verificationExpires = new Date();
       verificationExpires.setHours(verificationExpires.getHours() + 1);
 
-      // 新しいユーザーを作成 (仮登録状態)
-      const newUser = {
-        email,
-        password: hashedPassword,
-        createdAt: new Date(),
-        points: 0,
-        tasks: [],
-        verified: false,
+      // 認証情報を追加
+      Object.assign(newUser, {
         tempUser: true, // 仮登録フラグを追加
         verificationCode: verificationCode,
         verificationExpires: verificationExpires,
-      };
+      });
+
       console.log("仮登録ユーザー作成準備完了");
 
       // 認証メールを送信
@@ -128,23 +133,28 @@ export async function POST(req: NextRequest) {
           { status: 500 }
         );
       }
+    } else {
+      console.log("メール認証なしでユーザーを作成します");
+    }
 
-      // ユーザーを保存
-      // @ts-ignore - IDフィールドの型エラーを一時的に無視
-      await saveUser(newUser as User);
+    // ユーザーを保存
+    // @ts-ignore - IDフィールドの型エラーを一時的に無視
+    await saveUser(newUser as User);
 
-      // 保存後にメールアドレスで再取得して自動生成されたIDを取得
-      const savedUser = await getUserByEmail(email);
-      if (!savedUser) {
-        console.error("ユーザーの作成に失敗しました");
-        return NextResponse.json(
-          { success: false, message: "ユーザーの作成に失敗しました" },
-          { status: 500 }
-        );
-      }
+    // 保存後にメールアドレスで再取得して自動生成されたIDを取得
+    const savedUser = await getUserByEmail(email);
+    if (!savedUser) {
+      console.error("ユーザーの作成に失敗しました");
+      return NextResponse.json(
+        { success: false, message: "ユーザーの作成に失敗しました" },
+        { status: 500 }
+      );
+    }
 
-      console.log("仮登録ユーザーの作成に成功しました。ID:", savedUser.id);
+    console.log("ユーザーの作成に成功しました。ID:", savedUser.id);
 
+    // メール認証が必要な場合
+    if (requireVerification) {
       // ユーザーのverificationCodeが正しく保存されたか確認
       console.log(
         `検証用情報: コード=${savedUser.verificationCode}, 有効期限=${savedUser.verificationExpires}, 仮登録=${savedUser.tempUser}`
@@ -153,10 +163,10 @@ export async function POST(req: NextRequest) {
       // もし認証コードが保存されていない場合は再度保存を試みる
       if (
         !savedUser.verificationCode ||
-        savedUser.verificationCode !== verificationCode
+        savedUser.verificationCode !== newUser.verificationCode
       ) {
         console.log("認証コードが正しく保存されていないため再設定します");
-        savedUser.verificationCode = verificationCode;
+        savedUser.verificationCode = newUser.verificationCode;
         await saveUser(savedUser);
 
         // 再度確認
@@ -177,28 +187,26 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // メール認証が不要または送信失敗した場合は直接ログインさせる
-    if (!requireVerification) {
-      // JWTトークンを生成
-      const token = generateToken(savedUser.id);
+    // メール認証が不要な場合は直接ログインさせる
+    // JWTトークンを生成
+    const token = generateToken(savedUser.id);
 
-      // レスポンスを作成
-      const response = NextResponse.json({
-        success: true,
-        user: {
-          id: savedUser.id,
-          email: savedUser.email,
-          points: savedUser.points,
-          tasks: savedUser.tasks || [],
-        },
-        message: "アカウントが正常に作成されました",
-      });
+    // レスポンスを作成
+    const response = NextResponse.json({
+      success: true,
+      user: {
+        id: savedUser.id,
+        email: savedUser.email,
+        points: savedUser.points,
+        tasks: savedUser.tasks || [],
+      },
+      message: "アカウントが正常に作成されました",
+    });
 
-      // クッキーにトークンをセット
-      setTokenCookie(response, token);
+    // クッキーにトークンをセット
+    setTokenCookie(response, token);
 
-      return response;
-    }
+    return response;
   } catch (error) {
     console.error("ユーザー登録中にエラーが発生しました:", error);
     return NextResponse.json(

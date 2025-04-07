@@ -1,7 +1,14 @@
 import { MongoClient, Db, Collection } from "mongodb";
 import crypto from "crypto";
 
-if (!process.env.MONGODB_URI) {
+// 開発環境では環境変数がなくてもエラーを投げないようにする
+const IS_DEV = process.env.NODE_ENV === "development";
+const DEFAULT_MONGODB_URI = "mongodb://localhost:27017/catask";
+
+// 環境変数が設定されていなければデフォルト値を使用
+const uri = process.env.MONGODB_URI || (IS_DEV ? DEFAULT_MONGODB_URI : "");
+
+if (!uri && !IS_DEV) {
   throw new Error("環境変数MONGODB_URIが設定されていません");
 }
 
@@ -34,29 +41,156 @@ const USE_PLAINTEXT_BACKUP = true; // 暗号化とともに平文のバックア
 // 暗号化を無効化
 const DISABLE_ENCRYPTION = true; // 暗号化を完全に無効化するフラグ
 
-const uri = process.env.MONGODB_URI;
 const options = {};
 
 let client: MongoClient;
-let clientPromise: Promise<MongoClient>;
-let db: Db;
+let clientPromise: Promise<MongoClient> | null = null;
+let db: Db | null = null;
 
-if (process.env.NODE_ENV === "development") {
-  // 開発環境ではグローバル変数を使用してホットリロード時の複数接続を防ぐ
-  let globalWithMongo = global as typeof globalThis & {
-    _mongoClientPromise?: Promise<MongoClient>;
-    _mongoDb?: Db;
-  };
+// モックデータベース（開発環境でMongoDBが利用できない場合）
+const mockDb: {
+  collections: Record<string, any[]>;
+  getCollection: (name: string) => any;
+} = {
+  collections: {
+    users: [],
+    tasks: [],
+  },
+  getCollection: (name: string) => {
+    if (!mockDb.collections[name]) {
+      mockDb.collections[name] = [];
+    }
 
-  if (!globalWithMongo._mongoClientPromise) {
-    client = new MongoClient(uri, options);
-    globalWithMongo._mongoClientPromise = client.connect();
-    globalWithMongo._mongoDb = client.db("catask");
+    return {
+      find: (query: Record<string, any> = {}) => {
+        console.log(`モックDB: ${name}コレクションからデータを検索`, query);
+        return {
+          toArray: () => {
+            return Promise.resolve(mockDb.collections[name] || []);
+          },
+        };
+      },
+      findOne: (query: Record<string, any> = {}) => {
+        console.log(`モックDB: ${name}コレクションから1件検索`, query);
+        // 簡易的なクエリ処理（emailでの検索をサポート）
+        if (query.email && mockDb.collections[name]) {
+          const item = mockDb.collections[name].find(
+            (item) => item.email === query.email
+          );
+          return Promise.resolve(item || null);
+        }
+        // IDでの検索
+        if (query._id && mockDb.collections[name]) {
+          const item = mockDb.collections[name].find(
+            (item) => item._id === query._id
+          );
+          return Promise.resolve(item || null);
+        }
+        // 検索条件なしなら最初の要素を返す
+        return Promise.resolve(mockDb.collections[name]?.[0] || null);
+      },
+      insertOne: (doc: any) => {
+        console.log(`モックDB: ${name}コレクションに追加`, doc);
+        const id = doc._id || crypto.randomBytes(12).toString("hex");
+        const newDoc = { ...doc, _id: id };
+        mockDb.collections[name].push(newDoc);
+        return Promise.resolve({ insertedId: newDoc._id, acknowledged: true });
+      },
+      updateOne: (filter: any, update: any) => {
+        console.log(`モックDB: ${name}コレクションを更新`, filter, update);
+        let modifiedCount = 0;
+
+        if (mockDb.collections[name]) {
+          // $setオペレータの処理
+          if (update.$set) {
+            const index = mockDb.collections[name].findIndex(
+              (item) =>
+                (filter._id && item._id === filter._id) ||
+                (filter.email && item.email === filter.email)
+            );
+
+            if (index !== -1) {
+              mockDb.collections[name][index] = {
+                ...mockDb.collections[name][index],
+                ...update.$set,
+              };
+              modifiedCount = 1;
+            }
+          }
+        }
+
+        return Promise.resolve({ modifiedCount, acknowledged: true });
+      },
+      deleteOne: (filter: any) => {
+        console.log(`モックDB: ${name}コレクションから削除`, filter);
+        let deletedCount = 0;
+
+        if (mockDb.collections[name]) {
+          const initialLength = mockDb.collections[name].length;
+          mockDb.collections[name] = mockDb.collections[name].filter(
+            (item) => !(filter._id && item._id === filter._id)
+          );
+          deletedCount = initialLength - mockDb.collections[name].length;
+        }
+
+        return Promise.resolve({ deletedCount, acknowledged: true });
+      },
+    };
+  },
+};
+
+// MongoDBクライアントの初期化
+if (IS_DEV) {
+  // 開発環境
+  try {
+    let globalWithMongo = global as typeof globalThis & {
+      _mongoClientPromise?: Promise<MongoClient>;
+      _mongoDb?: Db;
+    };
+
+    if (!globalWithMongo._mongoClientPromise && uri) {
+      client = new MongoClient(uri, options);
+      try {
+        globalWithMongo._mongoClientPromise = client.connect();
+        globalWithMongo._mongoDb = client.db("catask");
+      } catch (error) {
+        console.warn("MongoDB接続エラー:", error);
+        globalWithMongo._mongoClientPromise = undefined;
+        globalWithMongo._mongoDb = undefined;
+      }
+    }
+
+    if (uri && globalWithMongo._mongoClientPromise) {
+      clientPromise = globalWithMongo._mongoClientPromise;
+      db = globalWithMongo._mongoDb!;
+
+      // 接続テスト
+      clientPromise.catch((error) => {
+        console.warn(
+          "MongoDBへの接続に失敗しました。モックデータベースにフォールバックします",
+          error
+        );
+        clientPromise = null;
+        db = null;
+      });
+    } else {
+      console.warn(
+        "開発環境: MongoDB接続URLが設定されていないか接続に失敗したため、モックデータベースを使用します"
+      );
+      clientPromise = null;
+      db = null;
+    }
+  } catch (e: unknown) {
+    const error = e as Error;
+    console.warn(
+      "開発環境: MongoDBへの接続に失敗しました。モックデータベースを使用します",
+      error.message
+    );
+    clientPromise = null;
+    db = null;
   }
-  clientPromise = globalWithMongo._mongoClientPromise;
-  db = globalWithMongo._mongoDb!;
 } else {
-  // 本番環境では毎回新しい接続を作成
+  // 本番環境
   client = new MongoClient(uri, options);
   clientPromise = client.connect();
   db = client.db("catask");
@@ -257,7 +391,7 @@ export function encryptTaskData(data: any): any {
       // Taskオブジェクト内にあるかもしれない他のデータも処理
       if (result.tasks && Array.isArray(result.tasks)) {
         try {
-          result.tasks = result.tasks.map((task) => encryptTaskData(task));
+          result.tasks = result.tasks.map((task: any) => encryptTaskData(task));
         } catch (e) {
           console.error("タスク配列の暗号化中にエラー:", e);
           // エラーが発生した場合は元のタスク配列を保持
@@ -350,7 +484,7 @@ export function decryptTaskData(data: any): any {
     // Taskオブジェクト内にあるかもしれない他のデータも処理
     if (result.tasks && Array.isArray(result.tasks)) {
       try {
-        result.tasks = result.tasks.map((task) => decryptTaskData(task));
+        result.tasks = result.tasks.map((task: any) => decryptTaskData(task));
       } catch (e) {
         console.error("タスク配列の復号化中にエラー:", e);
       }
@@ -390,8 +524,9 @@ function tryDecryptWithFallbackKeys(text: string): string {
       if (result && !result.startsWith("[復号化")) {
         return result;
       }
-    } catch (e) {
-      console.log(`フォールバックキー${i + 1}での復号化に失敗:`, e.message);
+    } catch (e: unknown) {
+      const error = e as Error;
+      console.log(`フォールバックキー${i + 1}での復号化に失敗:`, error.message);
     }
   }
 
@@ -457,8 +592,9 @@ function decryptWithSpecificKey(text: string, key: string): string {
     decrypted += decipher.final("utf8");
 
     return decrypted;
-  } catch (e) {
-    console.log(`特定キーでの復号化に失敗: ${e.message}`);
+  } catch (e: unknown) {
+    const error = e as Error;
+    console.log(`特定キーでの復号化に失敗: ${error.message}`);
     return "";
   }
 }
@@ -609,7 +745,17 @@ function tryAllPossibleKeys(text: string): string {
 export { clientPromise, db };
 
 // 拡張されたコレクション取得関数
-export const getCollection = (name: string): Collection => {
-  const collection = db.collection(name);
-  return collection;
+export const getCollection = (name: string): Collection | any => {
+  // 本番環境またはDBが接続されている場合
+  if (db) {
+    return db.collection(name);
+  }
+
+  // 開発環境でDBが接続されていない場合はモックを使用
+  if (IS_DEV) {
+    console.log(`モックコレクションを使用: ${name}`);
+    return mockDb.getCollection(name);
+  }
+
+  throw new Error("データベースが初期化されていません");
 };
